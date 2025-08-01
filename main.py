@@ -296,6 +296,14 @@ arithmetic_nodes_config = {
             "function": subtractor,
             "edges_to": ["decide_next_node"]
         },
+            "addition_operation2": {
+            "function": adder,
+            "edges_to": ["decide_next_node2"],
+        },
+        "subtraction_operation2": {
+            "function": subtractor2,
+            "edges_to": ["decide_next_node2"]
+        },
         "decide_next_node": {
             "function": decide_next_node,
             "edges_to": ["post_processing"],
