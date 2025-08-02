@@ -2,6 +2,7 @@ from typing import Dict, TypedDict, List
 from langgraph.graph import StateGraph, START, END
 from collections import defaultdict
 from IPython.display import display, Image
+import json
 
 
 # Define a state schema for StateGraph
@@ -274,121 +275,105 @@ def build_graph_from_config(config: dict, state_schema=AgentStateTest) -> StateG
     return graph
 
 
-# Enhanced nodes structure with topology information
-nodes_config = {
-    "nodes": {
-        "greeting": {
-            "function": greeting_node,
-            "edges_to": ["processor"]
-        },
-        "processor": {
-            "function": process_values,
-            "edges_to": ["post_processing"]
-        },
-        "post_processing": {
-            "function": post_processing,
-            "edges_to": []  # No outgoing edges (finish point)
-        }
-    },
-    "entry_point": "greeting",
-    "finish_point": "post_processing"
-}
-
-graph = build_graph_from_config(nodes_config)
-
-app = graph.compile()
-create_graph_png(app, 'graph_complete_visualization.png')
-
-# Test the complete workflow
-result = app.invoke(AgentStateTest(messages=[], operations=['*'], 
-                               values=[1, 2, 3, 4, 5], name="Robert", result="",
-                               skills=["Python", "Data Analysis", "C#"]))
-print_graph_result_manual(result)
-
-# -- New nodes for arithmetic operations
-arithmetic_nodes_config = {
-    "nodes": {
-        "router": {
-            "function": lambda state: state,  # Pass-through node function
-            "edges_to": [],  # Will use conditional edges instead
-            "conditional_edges": {
-                "addition_operation": "addition_operation",
-                "subtraction_operation": "subtraction_operation"
-            },
-            "router_function": router_node  # Separate router function
-        },
-        "addition_operation": {
-            "function": adder,
-            "edges_to": ["router2"]
-        },
-        "subtraction_operation": {
-            "function": subtractor,
-            "edges_to": ["router2"]
-        },
-        "router2": {
-            "function": lambda state: state,  # Pass-through node function
-            "edges_to": [],  # Will use conditional edges instead
-            "conditional_edges": {
-                "addition_operation2": "addition_operation2",
-                "subtraction_operation2": "subtraction_operation2"
-            },
-            "router_function": router_node2  # Separate router function
-        },
-        "addition_operation2": {
-            "function": adder2,
-            "edges_to": []  # Connects to END
-        },
-        "subtraction_operation2": {
-            "function": subtractor2,
-            "edges_to": []  # Connects to END
-        }
-    },
-    "entry_point": "router",
-    "finish_points": ["addition_operation2", "subtraction_operation2"]  # Multiple finish points
-}
-
-   
-graph2 = StateGraph(AgentState)
-graph2.add_node("addition_operation", adder)
-graph2.add_node("subtraction_operation", subtractor)
-graph2.add_node("router", lambda state: state)  #  Proper router function
-
-graph2.add_edge(START, "router")
-
-graph2.add_conditional_edges(
-    "router", 
-    router_node,
-    {
-        "addition_operation": "addition_operation",
-        "subtraction_operation": "subtraction_operation"
+def load_arithmetic_config_from_json(json_file_path: str, function_mapping_file: str = None) -> dict:
+    """
+    Load arithmetic nodes configuration from JSON file and convert function names to actual functions.
+    
+    :param json_file_path: Path to the JSON configuration file
+    :param function_mapping_file: Optional path to separate function mapping JSON file
+    :return: Configuration dictionary with actual function references
+    """
+    # Load JSON configuration
+    with open(json_file_path, 'r') as f:
+        json_config = json.load(f)
+    
+    # Load function mapping from separate file or from main config
+    if function_mapping_file:
+        # Option 1: Load from separate function mapping file
+        with open(function_mapping_file, 'r') as f:
+            mapping_config = json.load(f)
+        function_mapping_config = mapping_config["function_mapping"]
+    else:
+        # Option 2: Load from integrated config file (if available)
+        if "function_mapping" in json_config:
+            function_mapping_config = json_config["function_mapping"]
+        else:
+            raise ValueError("No function mapping found. Either provide a separate function_mapping_file or include function_mapping in the main config.")
+    
+    # Build function mapping dynamically from config
+    function_mapping = {}
+    
+    # Get current module's global namespace to access functions
+    current_module = globals()
+    
+    for func_name, func_config in function_mapping_config.items():
+        if func_config["type"] == "lambda":
+            # Evaluate lambda expression safely
+            function_mapping[func_name] = eval(func_config["expression"])
+        elif func_config["type"] == "function_reference":
+            # Get function from module globals
+            module_func_name = func_config["module_function"]
+            if module_func_name in current_module:
+                function_mapping[func_name] = current_module[module_func_name]
+            else:
+                raise ValueError(f"Function '{module_func_name}' not found in current module")
+        else:
+            raise ValueError(f"Unknown function type: {func_config['type']}")
+    
+    # Convert to Python configuration format
+    config = {
+        "nodes": {},
+        "entry_point": json_config["entry_point"],
+        "finish_points": json_config["finish_points"]
     }
-)
+    
+    # Process each node
+    for node_name, node_info in json_config["nodes"].items():
+        node_config = {
+            "function": function_mapping[node_info["function_name"]],
+            "edges_to": node_info["edges_to"]
+        }
+        
+        # Add conditional edges if present
+        if "conditional_edges" in node_info:
+            node_config["conditional_edges"] = node_info["conditional_edges"]
+        
+        # Add router function if present
+        if "router_function_name" in node_info:
+            node_config["router_function"] = function_mapping[node_info["router_function_name"]]
+        
+        config["nodes"][node_name] = node_config
+    
+    return config
 
-graph2.add_node("addition_operation2", adder2)
-graph2.add_node("subtraction_operation2", subtractor2)
-graph2.add_node("router2", lambda state: state)
 
-graph2.add_edge("addition_operation", "router2" )
-graph2.add_edge("subtraction_operation", "router2" )
+def create_graph_from_json_config(json_file_path: str, state_schema, function_mapping_file: str = None) -> StateGraph:
+    """
+    Convenience function to create a complete StateGraph from JSON configuration.
+    
+    :param json_file_path: Path to the JSON configuration file
+    :param state_schema: The state schema to use (e.g., AgentState)
+    :param function_mapping_file: Optional path to separate function mapping JSON file
+    :return: Compiled StateGraph ready for execution
+    """
+    config = load_arithmetic_config_from_json(json_file_path, function_mapping_file)
+    graph = build_graph_from_config(config, state_schema)
+    return graph.compile()
 
-graph2.add_conditional_edges(
-    "router2", 
-    router_node2,
-    {
-        "addition_operation2": "addition_operation2",
-        "subtraction_operation2": "subtraction_operation2"
-    }
-)
 
-graph2.add_edge("addition_operation2", END)
-graph2.add_edge("subtraction_operation2", END)
 
-#build_graph_from_config(arithmetic_nodes_config)
-app2 = graph2.compile()
-create_graph_png(app2, 'Conditional graph_arithmetic_operations_visualization.png') 
+# -- New nodes for arithmetic operations loaded from JSON
+with open('config.json', 'r') as f:
+    config = json.load(f)
+
+json_path = config.get('config_path')
+graph_nodes_config_file = json_path + config.get('graph_nodes', 'graph_nodes.json')
+function_mapping_file = json_path + config.get('function_mapping', 'function_mapping.json')  # Only needed if you have a separate function mapping file
+# Load the arithmetic nodes configuration from JSON                                          # If so, then pass function_mapping_file to load function.   
+graph_nodes_config = load_arithmetic_config_from_json(graph_nodes_config_file)        
 
 # Test the config-based graph creation
-graph3 = build_graph_from_config(arithmetic_nodes_config, AgentState)
+graph3 = build_graph_from_config(graph_nodes_config, AgentState)
 app3 = graph3.compile()
 create_graph_png(app3, 'Config_based_arithmetic_operations_visualization.png')
 
@@ -399,11 +384,7 @@ test_input = AgentState(operation='+', operation2='+',
                         final_number=0,final_number2=0, 
                          messages=[])
 
-print("=== Manual Graph (graph2) Results ===")
-result = app2.invoke(test_input.copy())
-print_graph_result_manual(result)
-
 print("\n=== Config-based Graph (graph3) Results ===")
-result2 = app3.invoke(test_input.copy())
+result2 = app3.invoke(test_input)
 print_graph_result_config(result2)
 

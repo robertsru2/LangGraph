@@ -1,0 +1,7 @@
+{
+    "config_path": "config/",
+    "arithmetic_nodes_config": "arithmetic_nodes_config.json",
+    "function_mapping": "function_mapping.json"
+}
+
+
