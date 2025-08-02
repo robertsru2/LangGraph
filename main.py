@@ -177,8 +177,7 @@ def router_node(state: AgentState) -> str:
         return "addition_operation"
     elif state['operation'] == '-':
         return "subtraction_operation"
-    else:
-        return "post_processing"  # Default case
+  
 
 def router_node2(state: AgentState) -> str:
     """
@@ -187,16 +186,14 @@ def router_node2(state: AgentState) -> str:
     """
     if 'messages' not in state:
         state['messages'] = []
-    
-    if 'operation' not in state:
-        raise ValueError("State must contain 'operation'.")
-    
-    if state['operation'] == '+':
+
+    if 'operation2' not in state:
+        raise ValueError("State must contain 'operation2'.")
+    if state['operation2'] == '+':
         return "addition_operation2"
-    elif state['operation'] == '-':
+    elif state['operation2'] == '-':
         return "subtraction_operation2"
-    else:
-        return "post_processing"  # Default case
+
 
 
 def post_processing(state: AgentStateTest) -> AgentStateTest:
@@ -220,21 +217,27 @@ def create_graph_png(app: StateGraph,
         f.write(graph_png)
     print(f"Graph saved as '{fname}'")
 
-def print_graph_result(result: AgentStateTest) -> None:
+def print_graph_result_manual(result: AgentStateTest) -> None:
     """
     Print the graph in a human-readable format.
     """
     print(result['messages'], f"\n*** How else can I help you?")
 
-
-def build_graph_from_config(config: dict) -> StateGraph:
+def print_graph_result_config(result: AgentState) -> None:
+    """
+    Print the graph in a human-readable format.
+    """
+    print(result['messages'], f"\n*** How else can I help you?")
+    
+def build_graph_from_config(config: dict, state_schema=AgentStateTest) -> StateGraph:
     """
     Build a complete StateGraph from configuration.
     
-    :param config: Dictionary containing nodes, entry_point, and finish_point
+    :param config: Dictionary containing nodes, entry_point, and finish_point(s)
+    :param state_schema: The state schema to use (defaults to AgentStateTest)
     :return: Configured StateGraph
     """
-    graph = StateGraph(AgentStateTest)
+    graph = StateGraph(state_schema)
     
     # Add all nodes
     for node_name, node_info in config["nodes"].items():
@@ -243,13 +246,30 @@ def build_graph_from_config(config: dict) -> StateGraph:
     # Set entry point
     graph.set_entry_point(config["entry_point"])
     
-    # Add edges
+    # Add regular edges and conditional edges
     for node_name, node_info in config["nodes"].items():
-        for target_node in node_info["edges_to"]:
+        # Add regular edges
+        for target_node in node_info.get("edges_to", []):
             graph.add_edge(node_name, target_node)
+        
+        # Add conditional edges if they exist
+        if "conditional_edges" in node_info:
+            conditional_mapping = node_info["conditional_edges"]
+            # Use the separate router function if provided, otherwise use the node function
+            router_func = node_info.get("router_function", node_info["function"])
+            graph.add_conditional_edges(
+                node_name,
+                router_func,
+                conditional_mapping
+            )
     
-    # Set finish point
-    graph.set_finish_point(config["finish_point"])
+    # Handle finish points (single or multiple)
+    if "finish_point" in config:
+        graph.set_finish_point(config["finish_point"])
+    elif "finish_points" in config:
+        # For multiple finish points, connect each to END
+        for finish_node in config["finish_points"]:
+            graph.add_edge(finish_node, END)
     
     return graph
 
@@ -283,42 +303,48 @@ create_graph_png(app, 'graph_complete_visualization.png')
 result = app.invoke(AgentStateTest(messages=[], operations=['*'], 
                                values=[1, 2, 3, 4, 5], name="Robert", result="",
                                skills=["Python", "Data Analysis", "C#"]))
-print_graph_result(result)
+print_graph_result_manual(result)
 
 # -- New nodes for arithmetic operations
 arithmetic_nodes_config = {
     "nodes": {
+        "router": {
+            "function": lambda state: state,  # Pass-through node function
+            "edges_to": [],  # Will use conditional edges instead
+            "conditional_edges": {
+                "addition_operation": "addition_operation",
+                "subtraction_operation": "subtraction_operation"
+            },
+            "router_function": router_node  # Separate router function
+        },
         "addition_operation": {
             "function": adder,
-            "edges_to": ["decide_next_node"],
+            "edges_to": ["router2"]
         },
         "subtraction_operation": {
             "function": subtractor,
-            "edges_to": ["decide_next_node"]
+            "edges_to": ["router2"]
         },
-            "addition_operation2": {
-            "function": adder,
-            "edges_to": ["decide_next_node2"],
+        "router2": {
+            "function": lambda state: state,  # Pass-through node function
+            "edges_to": [],  # Will use conditional edges instead
+            "conditional_edges": {
+                "addition_operation2": "addition_operation2",
+                "subtraction_operation2": "subtraction_operation2"
+            },
+            "router_function": router_node2  # Separate router function
+        },
+        "addition_operation2": {
+            "function": adder2,
+            "edges_to": []  # Connects to END
         },
         "subtraction_operation2": {
             "function": subtractor2,
-            "edges_to": ["decide_next_node2"]
-        },
-        "decide_next_node": {
-            "function": decide_next_node,
-            "edges_to": ["post_processing"],
-            "flow_control": {
-                "type": "conditional",
-                "condition": lambda state: state
-            }
-        },
-        "post_processing": {
-            "function": post_processing,
-            "edges_to": []  # No outgoing edges (finish point)
+            "edges_to": []  # Connects to END
         }
     },
-    "entry_point": "addition_operation",  # Start with addition operation
-    "finish_point": "post_processing"
+    "entry_point": "router",
+    "finish_points": ["addition_operation2", "subtraction_operation2"]  # Multiple finish points
 }
 
    
@@ -361,11 +387,23 @@ graph2.add_edge("subtraction_operation2", END)
 app2 = graph2.compile()
 create_graph_png(app2, 'Conditional graph_arithmetic_operations_visualization.png') 
 
-result = app2.invoke(AgentState(number1=10, 
-                    operation='+', number2=5, 
-                    final_number=0, number3=7,
-                    number4=3, final_number2=0, 
-                    operation2='+',messages=[]))
+# Test the config-based graph creation
+graph3 = build_graph_from_config(arithmetic_nodes_config, AgentState)
+app3 = graph3.compile()
+create_graph_png(app3, 'Config_based_arithmetic_operations_visualization.png')
 
-print_graph_result(result)
+# Test both graphs with the same input
+test_input = AgentState(operation='+', operation2='+',
+                        number1=10, number2=5, 
+                        number3=7, number4=3, 
+                        final_number=0,final_number2=0, 
+                         messages=[])
+
+print("=== Manual Graph (graph2) Results ===")
+result = app2.invoke(test_input.copy())
+print_graph_result_manual(result)
+
+print("\n=== Config-based Graph (graph3) Results ===")
+result2 = app3.invoke(test_input.copy())
+print_graph_result_config(result2)
 
