@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from collections import defaultdict
 from IPython.display import display, Image
 import json
-
+import random
 
 # Define a state schema for StateGraph
 class AgentStateTest(TypedDict):
@@ -26,7 +26,76 @@ class AgentState(TypedDict):
     final_number2: int
     messages: List[str] = []  # This is NOT a default value!
     
+class AgentStateV(TypedDict):
+    """
+    A state schema for the agent that includes operations and numbers.
+    This is used to define the state of the agent in the graph.
+    """
+    name: str
+    number: List[int]
+    counter: int
+
+def greeting_node2(state: AgentStateV) -> AgentStateV:
+    """
+    A simple greeting node that initializes the state with a welcome message.
+    """
+    if 'name' not in state:
+        state['name'] = "User"
     
+    state['name'] = f"Hello {state['name']}! How can I assist you today?"
+    state["counter"] = 0
+    
+    return state
+    
+def random_node(state: AgentStateV) -> AgentStateV:
+    """
+    A node that randomly genmerates a number from 1-10.
+    """
+   
+    state['number'].append(random.randint(0, 10))
+    state['counter'] += 1
+    
+    return state
+
+def should_continue(state: AgentStateV) -> AgentStateV:    
+    """
+    Function to decide what to do next.
+    """
+    if state['counter'] < 5:
+        print("ENTERING LOOP", state['counter'])
+        return "loop"
+    else:
+        return "exit"
+
+def run_graph_exerciseV(state: AgentStateV) -> AgentStateV:
+    """
+    Run a simple graph exercise with the given state.
+    """
+    graph = StateGraph(AgentStateV)
+    
+    # Define nodes
+    graph.add_node("greeting", greeting_node2)
+    graph.add_node("random", random_node)
+    graph.add_edge("greeting", "random")
+    # Define edges
+        
+    # Conditional edge based on the result of should_continue
+    graph.add_conditional_edges("random", 
+        should_continue, 
+        {
+            "loop": "random",
+            "exit": END
+        }
+    )
+
+    graph.add_edge(START, "greeting")
+    app = graph.compile()
+    create_graph_png(app, 'Exercise5_visualization.png') 
+    # Invoke the graph
+    result = app.invoke(state)
+    
+    return result
+
 def adder(state: AgentState) -> AgentState:
     """
     A simple adder node that adds two numbers and updates the state.
@@ -388,3 +457,6 @@ print("\n=== Config-based Graph (graph3) Results ===")
 result2 = app3.invoke(test_input)
 print_graph_result_config(result2)
 
+## Now run exercise V
+result = run_graph_exerciseV(AgentStateV(name="Alice", number=[], counter=-1))
+print(result)
