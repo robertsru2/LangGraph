@@ -1,0 +1,39 @@
+{
+  "function_mapping": {
+    "lambda_pass_through": {
+      "type": "lambda",
+      "expression": "lambda state: state",
+      "description": "Pass-through function that returns state unchanged"
+    },
+    "adder": {
+      "type": "function_reference",
+      "module_function": "adder",
+      "description": "Adds number1 and number2, stores in final_number"
+    },
+    "subtractor": {
+      "type": "function_reference", 
+      "module_function": "subtractor",
+      "description": "Subtracts number2 from number1, stores in final_number"
+    },
+    "adder2": {
+      "type": "function_reference",
+      "module_function": "adder2", 
+      "description": "Adds number3 and number4, stores in final_number2"
+    },
+    "subtractor2": {
+      "type": "function_reference",
+      "module_function": "subtractor2",
+      "description": "Subtracts number4 from number3, stores in final_number2"
+    },
+    "router_node": {
+      "type": "function_reference",
+      "module_function": "router_node",
+      "description": "Router function for first operation routing"
+    },
+    "router_node2": {
+      "type": "function_reference", 
+      "module_function": "router_node2",
+      "description": "Router function for second operation routing"
+    }
+  }
+}
