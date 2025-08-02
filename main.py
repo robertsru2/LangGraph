@@ -42,6 +42,9 @@ def greeting_node2(state: AgentStateV) -> AgentStateV:
     if 'name' not in state:
         state['name'] = "User"
     
+    if 'number' not in state:
+        state['number'] = []
+    
     state['name'] = f"Hello {state['name']}! How can I assist you today?"
     state["counter"] = 0
     
