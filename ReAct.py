@@ -43,7 +43,7 @@ def model_call(state: AgentState) -> AgentState:
     response = model.invoke([system_prompt] + state['messages'])
     return {"messages": [response]}
 
-def should_continue(state: AgentState) -> bool:
+def should_continue(state: AgentState) -> str:
     """
     Determine if the agent should continue processing based on the state.
     """
