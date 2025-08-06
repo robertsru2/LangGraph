@@ -1,0 +1,105 @@
+{
+  "function_mapping": {
+    "lambda_pass_through": {
+      "type": "lambda",
+      "expression": "lambda state: state",
+      "description": "Pass-through function that returns state unchanged"
+    },
+    "adder": {
+      "type": "function_reference",
+      "module_function": "adder",
+      "description": "Adds number1 and number2, stores in final_number"
+    },
+    "subtractor": {
+      "type": "function_reference", 
+      "module_function": "subtractor",
+      "description": "Subtracts number2 from number1, stores in final_number"
+    },
+    "adder2": {
+      "type": "function_reference",
+      "module_function": "adder2", 
+      "description": "Adds number3 and number4, stores in final_number2"
+    },
+    "subtractor2": {
+      "type": "function_reference",
+      "module_function": "subtractor2",
+      "description": "Subtracts number4 from number3, stores in final_number2"
+    },
+    "router_node": {
+      "type": "function_reference",
+      "module_function": "router_node",
+      "description": "Router function for first operation routing"
+    },
+    "router_node2": {
+      "type": "function_reference", 
+      "module_function": "router_node2",
+      "description": "Router function for second operation routing"
+    }
+  },
+  "nodes": {
+    "router": {
+      "function_name": "lambda_pass_through",
+      "edges_to": [],
+      "conditional_edges": {
+        "addition_operation": "addition_operation",
+        "subtraction_operation": "subtraction_operation"
+      },
+      "router_function_name": "router_node",
+      "description": "Pass-through node function with conditional routing"
+    },
+    "addition_operation": {
+      "function_name": "adder",
+      "edges_to": ["router2"],
+      "description": "Adds number1 and number2, stores result in final_number"
+    },
+    "subtraction_operation": {
+      "function_name": "subtractor",
+      "edges_to": ["router2"],
+      "description": "Subtracts number2 from number1, stores result in final_number"
+    },
+    "router2": {
+      "function_name": "lambda_pass_through",
+      "edges_to": [],
+      "conditional_edges": {
+        "addition_operation2": "addition_operation2",
+        "subtraction_operation2": "subtraction_operation2"
+      },
+      "router_function_name": "router_node2",
+      "description": "Pass-through node function with conditional routing for second operation"
+    },
+    "addition_operation2": {
+      "function_name": "adder2",
+      "edges_to": [],
+      "description": "Adds number3 and number4, stores result in final_number2. Connects to END"
+    },
+    "subtraction_operation2": {
+      "function_name": "subtractor2",
+      "edges_to": [],
+      "description": "Subtracts number4 from number3, stores result in final_number2. Connects to END"
+    }
+  },
+  "entry_point": "router",
+  "finish_points": ["addition_operation2", "subtraction_operation2"],
+  "state_schema": "AgentState",
+  "graph_description": "Arithmetic operations workflow with conditional routing based on operation and operation2 fields",
+  "workflow_flow": [
+    "START -> router",
+    "router -> (addition_operation OR subtraction_operation) based on 'operation' field",
+    "addition_operation -> router2",
+    "subtraction_operation -> router2", 
+    "router2 -> (addition_operation2 OR subtraction_operation2) based on 'operation2' field",
+    "addition_operation2 -> END",
+    "subtraction_operation2 -> END"
+  ],
+  "required_state_fields": {
+    "operation": "String: '+' or '-' for first operation",
+    "operation2": "String: '+' or '-' for second operation", 
+    "number1": "Integer: First operand for first operation",
+    "number2": "Integer: Second operand for first operation",
+    "number3": "Integer: First operand for second operation", 
+    "number4": "Integer: Second operand for second operation",
+    "final_number": "Integer: Result of first operation",
+    "final_number2": "Integer: Result of second operation",
+    "messages": "List[str]: Messages log"
+  }
+}
